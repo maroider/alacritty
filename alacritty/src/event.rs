@@ -399,6 +399,35 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
             args.push(self.terminal.bounds_to_string(start, end));
 
             start_daemon(launcher.program(), &args);
+        } else {
+            #[cfg(windows)]
+            {
+                use std::ptr;
+
+                // b"open\0", but with u16 rather than u8.
+                let verb: [u16; 5] = [0x006f, 0x0070, 0x0065, 0x006e, 0x0000];
+                let start = self.terminal.visible_to_buffer(url.start());
+                let end = self.terminal.visible_to_buffer(url.end());
+                let url = self.terminal.bounds_to_string(start, end);
+                let wide_url: Vec<u16> = url.encode_utf16().chain(std::iter::once(0)).collect();
+
+                let res = unsafe {
+                    winapi::um::shellapi::ShellExecuteW(
+                        ptr::null_mut(),
+                        verb.as_ptr(),
+                        wide_url.as_ptr(),
+                        ptr::null(),
+                        ptr::null(),
+                        winapi::um::winuser::SW_SHOWNORMAL,
+                    )
+                };
+                if res as usize > 32 {
+                    log::debug!("Successfully opened {}", url);
+                } else {
+                    // TODO: Better erro messages?
+                    log::warn!("Failed to open {}", url);
+                }
+            }
         }
     }
 
